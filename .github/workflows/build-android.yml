@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_API_URL: http://46.103.38.189
 
     steps:
       - name: Checkout
@@ -39,8 +41,6 @@ jobs:
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_PUBLIC_API_URL: http://46.103.38.189
 
       - name: Generate keystore
         run: |
