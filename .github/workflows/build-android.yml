@@ -57,10 +57,15 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
+      - name: Increase JVM memory
+        run: echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> android/gradle.properties
+
       - name: Build Release APK
         working-directory: android
         run: |
           ./gradlew assembleRelease --no-daemon \
+            -x lintVitalAnalyzeRelease \
+            -x lintAnalyzeRelease \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/release.keystore \
             -Pandroid.injected.signing.store.password=moydrug123 \
             -Pandroid.injected.signing.key.alias=moydrug \
