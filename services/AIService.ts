@@ -1,16 +1,19 @@
 // AIService — работа с бэкендом, построение промпта, парсинг JSON-профиля
-import axios from 'axios';
 import type { Message, AIProfile, SendMessageRequest, SendMessageResponse, Friend } from '@/types';
 import type { MemoryFact } from '@/types';
 import { PersonaConfig } from '@/constants/theme';
 
 const API_URL = 'http://46.103.38.189';
 
-const api = axios.create({
-  baseURL: API_URL,
-  timeout: 30_000,
-  headers: { 'Content-Type': 'application/json' },
-});
+async function postJSON(path: string, body: object): Promise<any> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
 // ─── Регулярка для скрытого JSON в конце ответа ──────────────────────────────
 const PROFILE_REGEX = /<!--D:(\{.*?\})-->/s;
@@ -108,10 +111,7 @@ export async function sendMessage(
     history: trimmedHistory,
   };
 
-  const { data } = await api.post<SendMessageResponse>('/chat', {
-    ...payload,
-    systemPrompt,
-  });
+  const data = await postJSON('/chat', { ...payload, systemPrompt });
 
   return parseAIResponse(data.content);
 }
@@ -123,7 +123,7 @@ export async function generateWelcome(friend: Friend): Promise<string> {
   const config = PersonaConfig[friend.personaType];
   const systemPrompt = buildSystemPrompt(friend, [], 'text', 'playful');
 
-  const { data } = await api.post<SendMessageResponse>('/chat', {
+  const data = await postJSON('/chat', {
     friendId: friend.id,
     content: `Представься как ${friend.name} (${config.label}) и скажи первое приветствие новому другу. Будь тёплым и искренним.`,
     mode: 'text',
