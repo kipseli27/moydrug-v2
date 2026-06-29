@@ -137,12 +137,11 @@ export default function VoiceScreen() {
 
       setStatus('speaking');
       await speak(content, friend.voiceConfig, () => setStatus('idle'));
-    } catch (e) {
+    } catch (e: any) {
       console.error('AI ошибка:', e);
-      const errText = 'Не удалось подключиться к серверу. Попробуй ещё раз.';
+      const errText = `ОШИБКА: ${e?.message ?? String(e)}`;
       setLastAIText(errText);
-      setStatus('speaking');
-      await speak(errText, friend!.voiceConfig, () => setStatus('idle'));
+      setStatus('idle');
     }
   }, [friend, messages]);
 
