@@ -4,6 +4,10 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'child_process';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { readFile, unlink } from 'fs/promises';
 
 // ─── Валидация окружения ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['ANTHROPIC_API_KEY'];
@@ -167,6 +171,58 @@ ${dialogue}
   } catch (err) {
     fastify.log.error({ err, friendId }, '/memory/extract ошибка');
     return reply.send({ facts: [] }); // тихая ошибка — не роняем клиента
+  }
+});
+
+// ─── POST /tts ───────────────────────────────────────────────────────────────
+// Принимает: { text, voice? }
+// Возвращает: { audio: base64mp3 }
+const ALLOWED_VOICES = [
+  'ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural',
+  'en-US-AriaNeural', 'en-US-GuyNeural',
+];
+
+fastify.post('/tts', {
+  config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+}, async (request, reply) => {
+  const { text, voice = 'ru-RU-SvetlanaNeural' } = request.body ?? {};
+
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return reply.status(400).send({ error: 'text обязателен' });
+  }
+  if (text.length > 1000) {
+    return reply.status(400).send({ error: 'text слишком длинный (макс 1000)' });
+  }
+  if (!ALLOWED_VOICES.includes(voice)) {
+    return reply.status(400).send({ error: 'Недопустимый голос' });
+  }
+
+  const tmpFile = join(tmpdir(), `tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
+
+  try {
+    await new Promise((resolve, reject) => {
+      const proc = spawn('edge-tts', [
+        '--voice', voice,
+        '--text', text.trim(),
+        '--write-media', tmpFile,
+      ]);
+
+      let stderr = '';
+      proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`edge-tts code ${code}: ${stderr}`));
+      });
+      proc.on('error', (err) => reject(new Error(`edge-tts spawn: ${err.message}`)));
+    });
+
+    const audioBuffer = await readFile(tmpFile);
+    return reply.send({ audio: audioBuffer.toString('base64'), format: 'mp3' });
+  } catch (err) {
+    fastify.log.error({ err }, '/tts ошибка');
+    return reply.status(503).send({ error: 'TTS временно недоступен' });
+  } finally {
+    unlink(tmpFile).catch(() => {});
   }
 });
 

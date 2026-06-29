@@ -93,11 +93,11 @@ export async function sendMessage(
   mode: 'text' | 'voice' = 'text',
   detectedStyle: AIProfile['s'] = 'emotional'
 ): Promise<{ content: string; profile: AIProfile | null }> {
-  // Берём последние 30 сообщений
-  const trimmedHistory = history.slice(0, 30).map((m) => ({
+  // Берём последние 30 сообщений в хронологическом порядке
+  const trimmedHistory = history.slice(-30).map((m) => ({
     role: m.role,
     content: m.content,
-  })).reverse(); // FlashList inverted — разворачиваем
+  }));
 
   const systemPrompt = buildSystemPrompt(friend, facts, mode, detectedStyle);
 
