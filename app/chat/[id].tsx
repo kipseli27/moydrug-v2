@@ -379,4 +379,5 @@ const styles = StyleSheet.create({
   },
   historyItemUser: { backgroundColor: Colors.surfaceSecondary },
   historyRole: { fontSize: Typography.size.xs, color: Colors.textMuted, marginBottom: 2 },
-  historyContent: { fontSize: Typography.size.sm, color: Col
+  historyContent: { fontSize: Typography.size.sm, color: Colors.textPrimary },
+});
