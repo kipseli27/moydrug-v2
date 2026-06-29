@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import type { VoiceConfig } from '@/types';
 
-const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3004').trim();
+const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://46.103.38.189').trim();
 
 // expo-speech-recognition — нативный модуль, недоступен в Expo Go
 let ExpoSpeechRecognitionModule: any = null;

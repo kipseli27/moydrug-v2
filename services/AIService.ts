@@ -4,7 +4,7 @@ import type { Message, AIProfile, SendMessageRequest, SendMessageResponse, Frien
 import type { MemoryFact } from '@/types';
 import { PersonaConfig } from '@/constants/theme';
 
-const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3003').trim();
+const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://46.103.38.189').trim();
 
 const api = axios.create({
   baseURL: API_URL,
