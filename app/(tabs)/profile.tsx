@@ -1,6 +1,8 @@
 // Экран профиля и настроек
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, Pressable, Alert,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -22,11 +24,12 @@ export default function ProfileScreen() {
   const handleResetHistory = useCallback(() => {
     Alert.alert(
       'Сбросить историю?',
-      'Все сообщения будут удалены. Нельзя отменить.',
+      'Все сообщения будут удалены.',
       [
         { text: 'Отмена', style: 'cancel' },
         {
-          text: 'Удалить', style: 'destructive',
+          text: 'Удалить',
+          style: 'destructive',
           onPress: async () => {
             const db = await initDatabase();
             await clearMessages(db, friend.id);
@@ -40,12 +43,16 @@ export default function ProfileScreen() {
   const handleNewFriend = useCallback(() => {
     Alert.alert(
       'Начать заново?',
-      'Потеряешь текущего друга и всю историю.',
+      'Ты потеряешь текущего собеседника и всю историю.',
       [
         { text: 'Отмена', style: 'cancel' },
         {
-          text: 'Начать заново', style: 'destructive',
-          onPress: () => { resetAll(); router.replace('/'); },
+          text: 'Начать заново',
+          style: 'destructive',
+          onPress: () => {
+            resetAll();
+            router.replace('/');
+          },
         },
       ]
     );
@@ -54,13 +61,17 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={[...theme.colors]} style={styles.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient
+          colors={[...theme.colors]}
+          style={styles.header}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
           <Text style={styles.avatar}>{config.emoji}</Text>
           <Text style={styles.name}>{friend.name}</Text>
           <Text style={styles.personaLabel}>{config.label}</Text>
         </LinearGradient>
 
-        {/* Подписка */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Подписка</Text>
           {isPremium() ? (
@@ -77,20 +88,19 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Настройки */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Настройки</Text>
-          <Pressable style={styles.row} onPress={() => isPremium() ? null : showPaywall()}>
-            <Text style={styles.rowLabel}>Изменить имя друга</Text>
-            <Text style={styles.rowValue}>{friend.name} →</Text>
-          </Pressable>
           <Pressable style={styles.row} onPress={() => router.push('/(auth)/theme')}>
             <Text style={styles.rowLabel}>Цветовая тема</Text>
-            <LinearGradient colors={[...theme.colors]} style={styles.themePreview} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+            <LinearGradient
+              colors={[...theme.colors]}
+              style={styles.themePreview}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
           </Pressable>
         </View>
 
-        {/* Данные */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Данные</Text>
           <Pressable style={styles.row} onPress={handleResetHistory}>
@@ -101,7 +111,7 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.version}>Мой Друг v1.0.0 · Сделано с ❤️</Text>
+        <Text style={styles.version}>Мой Друг v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -113,9 +123,22 @@ const styles = StyleSheet.create({
   avatar: { fontSize: 72, marginBottom: Spacing.md },
   name: { fontSize: Typography.size.title, fontWeight: Typography.weight.extrabold, color: '#fff', marginBottom: Spacing.xs },
   personaLabel: { fontSize: Typography.size.md, color: 'rgba(255,255,255,0.8)' },
-  section: { marginTop: Spacing.lg, marginHorizontal: Spacing.lg, backgroundColor: Colors.surface, borderRadius: Radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
-  sectionTitle: { fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold, color: Colors.textMuted, paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border },
+  section: {
+    marginTop: Spacing.lg, marginHorizontal: Spacing.lg,
+    backgroundColor: Colors.surface, borderRadius: Radius.lg,
+    overflow: 'hidden', borderWidth: 1, borderColor: Colors.border,
+  },
+  sectionTitle: {
+    fontSize: Typography.size.sm, fontWeight: Typography.weight.semibold,
+    color: Colors.textMuted, paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md, paddingBottom: Spacing.sm,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  row: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
   rowLabel: { fontSize: Typography.size.md, color: Colors.textPrimary },
   rowValue: { fontSize: Typography.size.md, color: Colors.textSecondary },
   themePreview: { width: 44, height: 24, borderRadius: Radius.sm },

@@ -1,50 +1,21 @@
-// Экран 3 онбординга — выбор цветовой темы
+// Экран 3 онбординга — выбор темы
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useUserStore } from '@/stores/userStore';
 import { ColorThemes, Colors, Spacing, Radius, Typography } from '@/constants/theme';
 import type { ColorThemeId } from '@/constants/theme';
 
-function ThemeCard({
-  theme, isSelected, onSelect,
-}: {
-  theme: typeof ColorThemes[number];
-  isSelected: boolean;
-  onSelect: (id: ColorThemeId) => void;
-}) {
-  const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  const handlePress = useCallback(() => {
-    scale.value = withSpring(0.93, { damping: 10 }, () => { scale.value = withSpring(1); });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onSelect(theme.id);
-  }, [onSelect, scale, theme.id]);
-
-  return (
-    <Pressable onPress={handlePress} style={styles.themeWrap}>
-      <Animated.View style={animStyle}>
-        <LinearGradient
-          colors={[...theme.colors]}
-          style={[styles.themeCard, isSelected && styles.themeCardSelected]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        >
-          {isSelected && <Text style={styles.checkmark}>✓</Text>}
-        </LinearGradient>
-        <Text style={[styles.themeName, isSelected && { color: Colors.textPrimary }]}>
-          {theme.name}
-        </Text>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
 export default function ThemeScreen() {
   const { onboarding, setColorTheme, completeOnboarding } = useUserStore();
+  const selected = onboarding.colorTheme;
+
+  const handleSelect = useCallback((id: ColorThemeId) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setColorTheme(id);
+  }, [setColorTheme]);
 
   const handleFinish = useCallback(() => {
     try {
@@ -52,74 +23,92 @@ export default function ThemeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace(`/chat/${friend.id}`);
     } catch (e) {
-      console.error('Ошибка завершения онбординга:', e);
+      console.error(e);
     }
   }, [completeOnboarding]);
 
-  const activeTheme = ColorThemes.find((t) => t.id === onboarding.colorTheme) ?? ColorThemes[0]!;
-
   return (
     <LinearGradient colors={[Colors.background, '#0A0A1A']} style={styles.container}>
-      <Pressable style={styles.backBtn} onPress={() => router.back()}>
-        <Text style={styles.backText}>← Назад</Text>
-      </Pressable>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+          <Text style={styles.backText}>← Назад</Text>
+        </Pressable>
 
-      <Text style={styles.title}>Выбери цвет общения</Text>
-      <Text style={styles.subtitle}>
-        Этот цвет будет у сообщений твоего{'\n'}друга и акцентов приложения
-      </Text>
+        <Text style={styles.title}>Выбери цвет{'\n'}настроения</Text>
+        <Text style={styles.subtitle}>Это будет цвет вашего общения</Text>
 
-      <View style={styles.previewWrap}>
-        <LinearGradient colors={[...activeTheme.colors]} style={styles.preview} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.previewText}>Привет! Я рад, что ты выбрал меня 😊</Text>
-        </LinearGradient>
-      </View>
+        <View style={styles.grid}>
+          {ColorThemes.map((theme) => {
+            const isSelected = selected === theme.id;
+            return (
+              <Pressable
+                key={theme.id}
+                style={[styles.card, isSelected && styles.cardSelected]}
+                onPress={() => handleSelect(theme.id as ColorThemeId)}
+              >
+                <LinearGradient
+                  colors={[...theme.colors]}
+                  style={styles.cardGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
+                <Text style={styles.cardName}>{theme.name}</Text>
+                {isSelected && <Text style={styles.check}>✓</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
 
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
-        {ColorThemes.map((theme) => (
-          <ThemeCard
-            key={theme.id}
-            theme={theme}
-            isSelected={onboarding.colorTheme === theme.id}
-            onSelect={setColorTheme}
-          />
-        ))}
+        <Pressable style={styles.button} onPress={handleFinish}>
+          <LinearGradient colors={['#6C63FF', '#9D50BB']} style={styles.buttonGradient}>
+            <Text style={styles.buttonText}>Начать общение →</Text>
+          </LinearGradient>
+        </Pressable>
+
+        <View style={styles.progress}>
+          <View style={styles.dot} />
+          <View style={styles.dot} />
+          <View style={[styles.dot, styles.dotActive]} />
+        </View>
       </ScrollView>
-
-      <Pressable style={styles.button} onPress={handleFinish}>
-        <LinearGradient colors={[...activeTheme.colors]} style={styles.buttonGradient}>
-          <Text style={styles.buttonText}>Познакомиться! 🎉</Text>
-        </LinearGradient>
-      </Pressable>
-
-      <View style={styles.progress}>
-        <View style={styles.dot} />
-        <View style={styles.dot} />
-        <View style={[styles.dot, styles.dotActive]} />
-      </View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: 60 },
-  backBtn: { marginBottom: Spacing.lg },
+  container: { flex: 1 },
+  content: { paddingHorizontal: Spacing.lg, paddingTop: 60, paddingBottom: Spacing.xl, alignItems: 'center' },
+  backBtn: { alignSelf: 'flex-start', marginBottom: Spacing.lg },
   backText: { color: Colors.textSecondary, fontSize: Typography.size.md },
-  title: { fontSize: Typography.size.xxl, fontWeight: Typography.weight.extrabold, color: Colors.textPrimary, marginBottom: Spacing.sm },
-  subtitle: { fontSize: Typography.size.md, color: Colors.textSecondary, marginBottom: Spacing.lg },
-  previewWrap: { borderRadius: Radius.lg, overflow: 'hidden', marginBottom: Spacing.lg },
-  preview: { padding: Spacing.lg, borderRadius: Radius.lg },
-  previewText: { fontSize: Typography.size.md, color: '#fff', fontWeight: Typography.weight.medium },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md, paddingBottom: Spacing.lg },
-  themeWrap: { width: '30%', alignItems: 'center' },
-  themeCard: { width: 80, height: 80, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.xs },
-  themeCardSelected: { borderWidth: 3, borderColor: Colors.textPrimary },
-  checkmark: { fontSize: 24, color: '#fff', fontWeight: '700' },
-  themeName: { fontSize: Typography.size.sm, color: Colors.textSecondary, textAlign: 'center' },
-  button: { borderRadius: Radius.full, overflow: 'hidden', marginBottom: Spacing.lg },
+  title: {
+    fontSize: Typography.size.title,
+    fontWeight: Typography.weight.extrabold,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+    lineHeight: 40,
+  },
+  subtitle: { fontSize: Typography.size.md, color: Colors.textSecondary, marginBottom: Spacing.xl },
+  grid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.xl },
+  card: {
+    width: '30%',
+    aspectRatio: 1,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    padding: Spacing.xs,
+  },
+  cardSelected: { borderColor: '#fff' },
+  cardGradient: { ...StyleSheet.absoluteFillObject },
+  cardName: { fontSize: Typography.size.xs, fontWeight: Typography.weight.bold, color: '#fff', textAlign: 'center' },
+  check: { position: 'absolute', top: 4, right: 8, fontSize: 16, color: '#fff', fontWeight: 'bold' },
+  button: { borderRadius: Radius.full, overflow: 'hidden', width: '100%', marginBottom: Spacing.lg },
   buttonGradient: { paddingVertical: Spacing.md, alignItems: 'center' },
-  buttonText: { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
-  progress: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.sm, marginBottom: Spacing.lg },
+  buttonText: { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: '#fff' },
+  progress: { flexDirection: 'row', gap: Spacing.sm },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.border },
   dotActive: { backgroundColor: Colors.primary, width: 24 },
 });

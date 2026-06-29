@@ -12,16 +12,17 @@
         "gradleCommand": ":app:assembleDebug"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.2.37:3003"
+        "EXPO_PUBLIC_API_URL": "http://46.103.38.189"
       }
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.2.37:3003"
+        "EXPO_PUBLIC_API_URL": "http://46.103.38.189"
       }
     },
     "production": {

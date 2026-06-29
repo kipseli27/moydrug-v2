@@ -1,107 +1,86 @@
-// Главный экран чата
+// Главный экран — голосовой собеседник
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable,
+  View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
-import { FlashList } from '@shopify/flash-list';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, FadeIn,
-} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import NetInfo from '@react-native-community/netinfo';
+import * as Haptics from 'expo-haptics';
 
-import { useChatStore } from '@/stores/chatStore';
 import { useUserStore } from '@/stores/userStore';
-import { MessageBubble } from '@/components/chat/MessageBubble';
-import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { ChatInputBar } from '@/components/chat/ChatInputBar';
-import { VoiceSheet } from '@/components/chat/VoiceSheet';
 import { sendMessage, generateWelcome } from '@/services/AIService';
-import { Colors, ColorThemes, Spacing, Typography, Radius } from '@/constants/theme';
-import type { Message, AIProfile } from '@/types';
 import {
-  initDatabase, loadMessages, saveMessage, getTopFacts, extractAndSaveFacts,
+  speak, stopSpeaking, requestSpeechPermission,
+  startListening, stopListening, useSTTEvents,
+} from '@/services/VoiceService';
+import { Colors, ColorThemes, Spacing, Typography, Radius, PersonaConfig } from '@/constants/theme';
+import {
+  initDatabase, loadMessages, saveMessage, getTopFacts,
 } from '@/services/MemoryService';
+import type { Message } from '@/types';
 import type * as SQLite from 'expo-sqlite';
 
-// Быстрые чипы для первого запуска
-const QUICK_CHIPS = [
-  'Привет! Как дела?',
-  'Расскажи о себе',
-  'Чем займёмся?',
-  'Просто поговорим',
-];
+type Status = 'idle' | 'listening' | 'thinking' | 'speaking';
 
-export default function ChatScreen() {
+export default function VoiceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const friend = useUserStore((s) => s.friend);
-  const {
-    messages, isTyping, currentMood, currentInsight, quotedMessageId,
-    addMessage, setTyping, setMessages, updateProfile, quoteMessage,
-  } = useChatStore();
 
-  const [isVoiceOpen, setVoiceOpen] = useState(false);
-  const [showChips, setShowChips] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
-  const [detectedStyle, setDetectedStyle] = useState<AIProfile['s']>('emotional');
+  const [status, setStatus] = useState<Status>('idle');
+  const [lastUserText, setLastUserText] = useState('');
+  const [lastAIText, setLastAIText] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const dbRef = useRef<SQLite.SQLiteDatabase | null>(null);
-  const messageCountRef = useRef(0);
+  const isListeningRef = useRef(false);
 
-  // Тема и цвет
   const colorTheme = friend?.colorTheme ?? 'violet';
   const theme = ColorThemes.find((t) => t.id === colorTheme) ?? ColorThemes[0]!;
-
-  // Анимация insight строки
-  const insightOpacity = useSharedValue(0);
-  const insightStyle = useAnimatedStyle(() => ({ opacity: insightOpacity.value }));
+  const config = friend ? PersonaConfig[friend.personaType] : null;
 
   // ─── Инициализация ────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function init() {
+      if (!friend) return;
       const db = await initDatabase();
       dbRef.current = db;
-
-      if (!friend) return;
-
-      // Загружаем историю из SQLite
       const history = await loadMessages(db, friend.id);
       setMessages(history);
 
-      // Если история пустая → приветствие
       if (history.length === 0) {
-        setShowChips(true);
         await sendWelcome(db);
+      } else {
+        const lastAI = [...history].reverse().find((m) => m.role === 'assistant');
+        if (lastAI) setLastAIText(lastAI.content);
       }
     }
-
     init();
+    return () => { stopSpeaking(); };
   }, [friend?.id]); // eslint-disable-line
 
-  // Следим за сетью
-  useEffect(() => {
-    const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(state.isConnected ?? false);
-    });
-    return unsub;
-  }, []);
+  // ─── Голосовые события (STT) ──────────────────────────────────────────────
 
-  // Показываем insight
-  useEffect(() => {
-    if (currentInsight) {
-      insightOpacity.value = withTiming(1, { duration: 400 });
+  useSTTEvents(
+    async (transcript) => {
+      isListeningRef.current = false;
+      if (!transcript.trim()) { setStatus('idle'); return; }
+      setLastUserText(transcript);
+      await handleAI(transcript);
+    },
+    (error) => {
+      console.warn('STT ошибка:', error);
+      setStatus('idle');
     }
-  }, [currentInsight, insightOpacity]);
+  );
 
   // ─── Приветствие ──────────────────────────────────────────────────────────
 
   async function sendWelcome(db: SQLite.SQLiteDatabase) {
     if (!friend) return;
-    setTyping(true);
-
+    setStatus('thinking');
     try {
       const content = await generateWelcome(friend);
       const msg: Message = {
@@ -111,221 +90,217 @@ export default function ChatScreen() {
         content,
         createdAt: Date.now(),
       };
-      addMessage(msg);
+      setMessages([msg]);
       await saveMessage(db, msg);
-    } catch (e) {
-      console.error('Ошибка приветствия:', e);
-    } finally {
-      setTyping(false);
+      setLastAIText(content);
+      setStatus('speaking');
+      await speak(content, friend.voiceConfig, () => setStatus('idle'));
+    } catch {
+      setLastAIText('Привет! Нажми кнопку и поговори со мной 🎤');
+      setStatus('idle');
     }
   }
 
-  // ─── Отправка сообщения ───────────────────────────────────────────────────
+  // ─── Обработка AI ─────────────────────────────────────────────────────────
 
-  const handleSend = useCallback(async (
-    text: string,
-    mode: 'text' | 'voice' = 'text'
-  ): Promise<string> => {
-    if (!friend || !dbRef.current) return '';
-
+  const handleAI = useCallback(async (text: string) => {
+    if (!friend || !dbRef.current) return;
     const db = dbRef.current;
-    setShowChips(false);
 
-    // Добавляем сообщение пользователя
     const userMsg: Message = {
       id: `msg_${Date.now()}`,
       friendId: friend.id,
       role: 'user',
       content: text,
       createdAt: Date.now(),
-      isVoice: mode === 'voice',
-      quotedMessageId: quotedMessageId ?? undefined,
+      isVoice: true,
     };
-    addMessage(userMsg);
+    setMessages((prev) => [...prev, userMsg]);
     await saveMessage(db, userMsg);
-    quoteMessage(null);
-    messageCountRef.current += 1;
 
-    setTyping(true);
-
+    setStatus('thinking');
     try {
-      // Загружаем факты памяти
       const facts = await getTopFacts(db, friend.id);
+      const { content } = await sendMessage(friend, text, messages, facts, 'voice', 'emotional');
 
-      // Запрос к AI
-      const { content, profile } = await sendMessage(
-        friend,
-        text,
-        messages,
-        facts,
-        mode,
-        detectedStyle
-      );
-
-      // Обновляем профиль UI
-      if (profile) {
-        updateProfile(profile);
-        setDetectedStyle(profile.s);
-      }
-
-      // Сохраняем ответ AI
       const aiMsg: Message = {
         id: `msg_${Date.now() + 1}`,
         friendId: friend.id,
         role: 'assistant',
         content,
         createdAt: Date.now(),
-        isVoice: mode === 'voice',
+        isVoice: true,
       };
-      addMessage(aiMsg);
+      setMessages((prev) => [...prev, aiMsg]);
       await saveMessage(db, aiMsg);
+      setLastAIText(content);
 
-      // Каждые 10 сообщений → извлекаем факты (фоново)
-      if (messageCountRef.current % 10 === 0) {
-        extractAndSaveFacts(db, friend.id, messages.slice(0, 20));
-      }
-
-      return content;
+      setStatus('speaking');
+      await speak(content, friend.voiceConfig, () => setStatus('idle'));
     } catch (e) {
-      console.error('Ошибка AI:', e);
-      const errMsg: Message = {
-        id: `msg_err_${Date.now()}`,
-        friendId: friend.id,
-        role: 'assistant',
-        content: isOnline
-          ? 'Что-то пошло не так, попробуй ещё раз 🙏'
-          : 'Нет подключения к сети, проверь интернет',
-        createdAt: Date.now(),
-      };
-      addMessage(errMsg);
-      return '';
-    } finally {
-      setTyping(false);
+      console.error('AI ошибка:', e);
+      const errText = 'Не удалось подключиться к серверу. Попробуй ещё раз.';
+      setLastAIText(errText);
+      setStatus('speaking');
+      await speak(errText, friend!.voiceConfig, () => setStatus('idle'));
     }
-  }, [
-    friend, messages, quotedMessageId, detectedStyle, isOnline,
-    addMessage, setTyping, updateProfile, quoteMessage,
-  ]);
+  }, [friend, messages]);
 
-  const handleVoiceSend = useCallback(async (text: string): Promise<string> => {
-    return handleSend(text, 'voice');
-  }, [handleSend]);
+  // ─── Нажатие микрофона ────────────────────────────────────────────────────
 
-  // ─── Рендер ───────────────────────────────────────────────────────────────
+  const handleMicPress = useCallback(async () => {
+    if (status === 'speaking') {
+      stopSpeaking();
+      setStatus('idle');
+      return;
+    }
+    if (status === 'listening') {
+      stopListening();
+      isListeningRef.current = false;
+      setStatus('idle');
+      return;
+    }
+    if (status === 'thinking') return;
 
-  if (!friend) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const granted = await requestSpeechPermission();
+    if (!granted) {
+      setLastAIText('Нет разрешения на микрофон. Проверь настройки.');
+      return;
+    }
+    isListeningRef.current = true;
+    setStatus('listening');
+    startListening('ru-RU');
+  }, [status]);
+
+  // ─── Статус-текст ─────────────────────────────────────────────────────────
+
+  const statusLabel: Record<Status, string> = {
+    idle: 'Нажми и говори',
+    listening: 'Слушаю...',
+    thinking: 'Думает...',
+    speaking: 'Говорит... (нажми чтобы остановить)',
+  };
+
+  if (!friend || !config) {
     return (
-      <View style={styles.errorWrap}>
-        <Text style={styles.errorText}>Друг не найден</Text>
+      <View style={styles.center}>
+        <Text style={{ color: Colors.textPrimary }}>Собеседник не найден</Text>
         <Pressable onPress={() => router.replace('/')}>
-          <Text style={{ color: Colors.primary }}>← Начать заново</Text>
+          <Text style={{ color: Colors.primary, marginTop: 12 }}>← Начать заново</Text>
         </Pressable>
       </View>
     );
   }
 
-  const quotedMsg = quotedMessageId
-    ? messages.find((m) => m.id === quotedMessageId)
-    : null;
-
   return (
     <SafeAreaView style={styles.container}>
       {/* Хедер */}
-      <LinearGradient
-        colors={[Colors.surface, Colors.background]}
-        style={styles.header}
-      >
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backIcon}>←</Text>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.headerBtn}>
+          <Text style={styles.headerIcon}>←</Text>
         </Pressable>
-
         <View style={styles.headerCenter}>
-          <Text style={styles.friendName}>{friend.name}</Text>
-          <Text style={styles.moodEmoji}>{currentMood}</Text>
+          <Text style={styles.headerName}>{friend.name}</Text>
+          <Text style={styles.headerEmoji}>{config.emoji}</Text>
         </View>
-
-        <Pressable
-          style={styles.settingsBtn}
-          onPress={() => router.push('/(tabs)/profile')}
-        >
-          <Text style={styles.settingsIcon}>⚙️</Text>
+        <Pressable onPress={() => router.push('/(tabs)/profile')} style={styles.headerBtn}>
+          <Text style={styles.headerIcon}>⚙️</Text>
         </Pressable>
-      </LinearGradient>
+      </View>
 
-      {/* Оффлайн индикатор */}
-      {!isOnline && (
-        <Animated.View entering={FadeIn} style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>📡 Нет подключения — история доступна</Text>
-        </Animated.View>
-      )}
+      {/* Центральная зона */}
+      <View style={styles.main}>
+        {/* Аватар */}
+        <LinearGradient
+          colors={[...theme.colors]}
+          style={styles.avatar}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <Text style={styles.avatarEmoji}>{config.emoji}</Text>
+        </LinearGradient>
 
-      {/* Список сообщений — FlashList inverted */}
-      {/* Union-тип: либо маркер typing, либо реальное сообщение */}
-      <FlashList<Message | { id: string }>
-        data={isTyping ? [{ id: '__typing__' } as { id: string }, ...messages] : messages}
-        renderItem={({ item }) => {
-          if (item.id === '__typing__') return <TypingIndicator />;
-          return (
-            <MessageBubble
-              message={item as Message}
-              colorTheme={colorTheme}
-              onSwipe={quoteMessage}
-            />
-          );
-        }}
-        keyExtractor={(item) => item.id}
-        inverted
-        estimatedItemSize={80}
-        contentContainerStyle={{ paddingTop: Spacing.md }}
-        ListFooterComponent={
-          showChips ? (
-            <View style={styles.chips}>
-              {QUICK_CHIPS.map((chip) => (
-                <Pressable
-                  key={chip}
-                  style={[styles.chip, { borderColor: theme.colors[0] }]}
-                  onPress={() => handleSend(chip)}
-                >
-                  <Text style={[styles.chipText, { color: theme.colors[0] }]}>{chip}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null
-        }
-      />
+        {/* Последний ответ AI */}
+        <ScrollView style={styles.textScroll} contentContainerStyle={styles.textScrollContent}>
+          {lastUserText ? (
+            <Text style={styles.userText}>Ты: {lastUserText}</Text>
+          ) : null}
+          {lastAIText ? (
+            <Text style={styles.aiText}>{lastAIText}</Text>
+          ) : null}
+        </ScrollView>
 
-      {/* Insight строка */}
-      {currentInsight.length > 0 && (
-        <Animated.View style={[styles.insightBar, insightStyle]}>
-          <Text style={styles.insightText} numberOfLines={1}>
-            ✨ {currentInsight}
+        {/* Статус */}
+        <Text style={styles.statusText}>{statusLabel[status]}</Text>
+
+        {/* Кнопка микрофона */}
+        <Pressable
+          onPress={handleMicPress}
+          style={({ pressed }) => [
+            styles.micBtn,
+            status === 'listening' && styles.micBtnActive,
+            status === 'speaking' && styles.micBtnSpeaking,
+            pressed && styles.micBtnPressed,
+          ]}
+        >
+          <LinearGradient
+            colors={
+              status === 'listening'
+                ? ['#FF6B35', '#FF4500']
+                : status === 'speaking'
+                ? ['#52B788', '#40916C']
+                : [...theme.colors]
+            }
+            style={styles.micBtnGradient}
+          >
+            {status === 'thinking' ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : (
+              <Text style={styles.micIcon}>
+                {status === 'listening' ? '⏹' : status === 'speaking' ? '⏸' : '🎤'}
+              </Text>
+            )}
+          </LinearGradient>
+        </Pressable>
+
+        {/* История */}
+        <Pressable
+          style={styles.historyBtn}
+          onPress={() => setShowHistory(!showHistory)}
+        >
+          <Text style={styles.historyBtnText}>
+            {showHistory ? 'Скрыть историю' : 'История'}
           </Text>
-        </Animated.View>
+        </Pressable>
+      </View>
+
+      {/* История сообщений (опционально) */}
+      {showHistory && (
+        <View style={styles.history}>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {[...messages].reverse().map((m) => (
+              <View key={m.id} style={[
+                styles.historyItem,
+                m.role === 'user' && styles.historyItemUser,
+              ]}>
+                <Text style={styles.historyRole}>
+                  {m.role === 'user' ? 'Ты' : friend.name}
+                </Text>
+                <Text style={styles.historyContent}>{m.content}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
       )}
-
-      {/* Инпут */}
-      <ChatInputBar
-        onSend={handleSend}
-        onVoicePress={() => setVoiceOpen(true)}
-        quotedMessage={quotedMsg ? { id: quotedMsg.id, content: quotedMsg.content } : null}
-        onCancelQuote={() => quoteMessage(null)}
-        isDisabled={!isOnline}
-      />
-
-      {/* Голосовой лист */}
-      <VoiceSheet
-        visible={isVoiceOpen}
-        onClose={() => setVoiceOpen(false)}
-        onSend={handleVoiceSend}
-        colorTheme={colorTheme}
-        voiceConfig={friend.voiceConfig}
-      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -334,68 +309,76 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  backBtn: { padding: Spacing.sm },
-  backIcon: { color: Colors.textPrimary, fontSize: 22 },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  friendName: {
-    fontSize: Typography.size.lg,
-    fontWeight: Typography.weight.bold,
-    color: Colors.textPrimary,
-  },
-  moodEmoji: { fontSize: 20 },
-  settingsBtn: { padding: Spacing.sm },
-  settingsIcon: { fontSize: 20 },
-  offlineBanner: {
-    backgroundColor: Colors.warning + '33',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.warning + '66',
-  },
-  offlineText: {
-    color: Colors.warning,
-    fontSize: Typography.size.sm,
-    textAlign: 'center',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    justifyContent: 'center',
-  },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+  headerBtn: { padding: Spacing.sm, width: 44, alignItems: 'center' },
+  headerIcon: { color: Colors.textPrimary, fontSize: 22 },
+  headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
+  headerName: { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  headerEmoji: { fontSize: 20 },
+
+  main: { flex: 1, alignItems: 'center', paddingHorizontal: Spacing.lg, paddingTop: Spacing.xl },
+
+  avatar: {
+    width: 140,
+    height: 140,
     borderRadius: Radius.full,
-    borderWidth: 1,
-    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.xl,
   },
-  chipText: { fontSize: Typography.size.sm, fontWeight: Typography.weight.medium },
-  insightBar: {
-    backgroundColor: Colors.surface,
+  avatarEmoji: { fontSize: 72 },
+
+  textScroll: { width: '100%', maxHeight: 160, marginBottom: Spacing.lg },
+  textScrollContent: { paddingHorizontal: Spacing.sm },
+  userText: {
+    fontSize: Typography.size.sm,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+    fontStyle: 'italic',
+  },
+  aiText: {
+    fontSize: Typography.size.lg,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+
+  statusText: {
+    fontSize: Typography.size.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xl,
+  },
+
+  micBtn: {
+    width: 100,
+    height: 100,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+    marginBottom: Spacing.lg,
+  },
+  micBtnActive: { transform: [{ scale: 1.1 }] },
+  micBtnSpeaking: { opacity: 0.85 },
+  micBtnPressed: { opacity: 0.7 },
+  micBtnGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  micIcon: { fontSize: 40 },
+
+  historyBtn: { paddingVertical: Spacing.sm },
+  historyBtnText: { color: Colors.textMuted, fontSize: Typography.size.sm },
+
+  history: {
+    height: 200,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
-  insightText: {
-    fontSize: Typography.size.sm,
-    color: Colors.textSecondary,
-    fontStyle: 'italic',
+  historyItem: {
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
   },
-  errorWrap: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-  },
-  errorText: { color: Colors.textPrimary, fontSize: Typography.size.lg },
+  historyItemUser: { backgroundColor: Colors.surfaceSecondary },
+  historyRole: { fontSize: Typography.size.xs, color: Colors.textMuted, marginBottom: 2 },
+  historyContent: { fontSize: Typography.size.sm, color: Colors.textPrimary },
 });

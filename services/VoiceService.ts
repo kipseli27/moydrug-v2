@@ -1,10 +1,17 @@
 // VoiceService — STT (expo-speech-recognition) + TTS (expo-speech)
 import * as Speech from 'expo-speech';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
 import type { VoiceConfig } from '@/types';
+
+// expo-speech-recognition — нативный модуль, недоступен в Expo Go
+let ExpoSpeechRecognitionModule: any = null;
+let useSpeechRecognitionEvent: any = (event: string, cb: any) => {};
+try {
+  const mod = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = mod.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = mod.useSpeechRecognitionEvent;
+} catch {
+  // Expo Go — голосовое распознавание недоступно
+}
 
 // ─── TTS (Text-to-Speech) ────────────────────────────────────────────────────
 
@@ -39,11 +46,13 @@ export function isSpeaking(): Promise<boolean> {
 // ─── STT (Speech-to-Text) ────────────────────────────────────────────────────
 
 export async function requestSpeechPermission(): Promise<boolean> {
+  if (!ExpoSpeechRecognitionModule) return false;
   const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
   return result.granted;
 }
 
 export function startListening(lang = 'ru-RU'): void {
+  if (!ExpoSpeechRecognitionModule) return;
   ExpoSpeechRecognitionModule.start({
     lang,
     interimResults: true,
@@ -52,6 +61,7 @@ export function startListening(lang = 'ru-RU'): void {
 }
 
 export function stopListening(): void {
+  if (!ExpoSpeechRecognitionModule) return;
   ExpoSpeechRecognitionModule.stop();
 }
 

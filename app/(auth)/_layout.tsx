@@ -1,4 +1,3 @@
-// Layout группы онбординга (auth)
 import { Stack } from 'expo-router';
 
 export default function AuthLayout() {

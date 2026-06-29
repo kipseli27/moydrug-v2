@@ -8,6 +8,22 @@ node_modules/
 .expo/
 dist/
 build/
+web-build/
 *.log
+
+# Секреты — НИКОГДА не коммитить
 .env
 .env.local
+.env.production
+server/.env
+
+# Нативные сборки (генерируются EAS)
+android/
+ios/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# EAS секреты
+google-service-account.json

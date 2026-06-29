@@ -5,9 +5,6 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withSpring,
-} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useUserStore } from '@/stores/userStore';
@@ -17,20 +14,11 @@ export default function NameScreen() {
   const { onboarding, setFriendName } = useUserStore();
   const { personaType, friendName } = onboarding;
   const config = personaType ? PersonaConfig[personaType] : null;
-
-  const avatarScale = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
-
-  const avatarStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: avatarScale.value }],
-  }));
 
   const handleChange = useCallback((text: string) => {
     setFriendName(text);
-    avatarScale.value = withSpring(1.08, { damping: 8 }, () => {
-      avatarScale.value = withSpring(1);
-    });
-  }, [setFriendName, avatarScale]);
+  }, [setFriendName]);
 
   const handleNext = useCallback(() => {
     if (!friendName.trim()) return;
@@ -48,16 +36,14 @@ export default function NameScreen() {
           <Text style={styles.backText}>← Назад</Text>
         </Pressable>
 
-        <Animated.View style={[styles.avatarWrap, avatarStyle]}>
-          <View style={[styles.avatar, { backgroundColor: (config?.color ?? '#333') + '33' }]}>
-            <Text style={styles.avatarEmoji}>{config?.emoji ?? '👤'}</Text>
-          </View>
-          <Text style={[styles.avatarName, { color: config?.color ?? Colors.primary }]}>
-            {friendName || config?.label || ''}
-          </Text>
-        </Animated.View>
+        <View style={[styles.avatar, { backgroundColor: (config?.color ?? '#333') + '33' }]}>
+          <Text style={styles.avatarEmoji}>{config?.emoji ?? '👤'}</Text>
+        </View>
+        <Text style={[styles.avatarName, { color: config?.color ?? Colors.primary }]}>
+          {friendName || config?.label || ''}
+        </Text>
 
-        <Text style={styles.title}>Как зовут твоего друга?</Text>
+        <Text style={styles.title}>Как зовут твоего{'\n'}собеседника?</Text>
         <Text style={styles.subtitle}>От 1 до 18 символов</Text>
 
         <TextInput
@@ -102,11 +88,17 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: 60, alignItems: 'center' },
   backBtn: { alignSelf: 'flex-start', marginBottom: Spacing.lg },
   backText: { color: Colors.textSecondary, fontSize: Typography.size.md },
-  avatarWrap: { alignItems: 'center', marginBottom: Spacing.xl },
-  avatar: { width: 120, height: 120, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.sm },
-  avatarEmoji: { fontSize: 56 },
-  avatarName: { fontSize: Typography.size.xl, fontWeight: Typography.weight.bold, minHeight: 28 },
-  title: { fontSize: Typography.size.xxl, fontWeight: Typography.weight.extrabold, color: Colors.textPrimary, marginBottom: Spacing.sm, textAlign: 'center' },
+  avatar: { width: 100, height: 100, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.sm },
+  avatarEmoji: { fontSize: 48 },
+  avatarName: { fontSize: Typography.size.xl, fontWeight: Typography.weight.bold, marginBottom: Spacing.xl, minHeight: 28 },
+  title: {
+    fontSize: Typography.size.xxl,
+    fontWeight: Typography.weight.extrabold,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+    lineHeight: 32,
+  },
   subtitle: { fontSize: Typography.size.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
   input: {
     width: '100%', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
@@ -118,7 +110,7 @@ const styles = StyleSheet.create({
   button: { borderRadius: Radius.full, overflow: 'hidden', width: '100%', marginBottom: Spacing.lg },
   buttonDisabled: { opacity: 0.5 },
   buttonGradient: { paddingVertical: Spacing.md, alignItems: 'center' },
-  buttonText: { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: Colors.textPrimary },
+  buttonText: { fontSize: Typography.size.lg, fontWeight: Typography.weight.bold, color: '#fff' },
   progress: { flexDirection: 'row', gap: Spacing.sm },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.border },
   dotActive: { backgroundColor: Colors.primary, width: 24 },

@@ -8,6 +8,12 @@
     "scheme": "moydrug",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "updates": {
+      "url": "https://u.expo.dev/45b4559e-3c73-4136-abb1-60a7ded44b7e"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -27,8 +33,9 @@
       }
     },
     "android": {
-      "package": "com.moydrug.app",
+      "package": "com.moydrug.v2app",
       "versionCode": 2,
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F0F1A"
@@ -45,6 +52,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-updates",
       "expo-font",
       "expo-speech-recognition",
       [

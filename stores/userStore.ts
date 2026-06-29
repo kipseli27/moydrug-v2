@@ -1,20 +1,46 @@
 // Zustand store — пользователь и друг
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { MMKV } from 'react-native-mmkv';
 import type { UserProfile, Friend } from '@/types';
 import { PersonaConfig } from '@/constants/theme';
 import type { ColorThemeId, PersonaType } from '@/constants/theme';
 
-const storage = new MMKV({ id: 'user-storage' });
+// Простое хранилище — MMKV в нативном APK, fallback в Expo Go
+const memCache: Record<string, string> = {};
 
-// Сохранение/загрузка из MMKV
+interface Storage {
+  set(key: string, value: string): void;
+  getString(key: string): string | undefined;
+  clearAll(): void;
+}
+
+let _storage: Storage | null = null;
+function getStorage(): Storage {
+  if (_storage) return _storage;
+  try {
+    const { MMKV } = require('react-native-mmkv');
+    _storage = new MMKV({ id: 'user-storage' });
+  } catch {
+    // Expo Go — используем in-memory
+    _storage = {
+      set: (key, value) => { memCache[key] = value; },
+      getString: (key) => memCache[key],
+      clearAll: () => { Object.keys(memCache).forEach(k => delete memCache[k]); },
+    };
+  }
+  return _storage!;
+}
+
 function persist<T>(key: string, value: T): void {
-  storage.set(key, JSON.stringify(value));
+  try { getStorage().set(key, JSON.stringify(value)); } catch {}
 }
 function restore<T>(key: string): T | null {
-  const raw = storage.getString(key);
-  return raw ? (JSON.parse(raw) as T) : null;
+  try {
+    const raw = getStorage().getString(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
 }
 
 interface OnboardingState {
@@ -81,8 +107,7 @@ export const useUserStore = create<UserState>()(
       set((state) => {
         state.onboarding.colorTheme = theme;
       });
-      // Сохраняем тему мгновенно (MMKV)
-      storage.set('colorTheme', theme);
+      getStorage().set('colorTheme', theme);
     },
 
     completeOnboarding: () => {
@@ -129,7 +154,7 @@ export const useUserStore = create<UserState>()(
     },
 
     resetAll: () => {
-      storage.clearAll();
+      getStorage().clearAll();
       set((state) => {
         state.user = null;
         state.friend = null;
