@@ -29,7 +29,7 @@ jobs:
         run: npm ci
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform android --clean --no-interactive
+        run: npx expo prebuild --platform android --clean
         env:
           EXPO_PUBLIC_API_URL: http://46.103.38.189
 
