@@ -51,6 +51,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withNetworkSecurity",
       "expo-router",
       "expo-updates",
       "expo-font",
