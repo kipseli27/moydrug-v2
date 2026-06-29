@@ -68,7 +68,7 @@ export async function speak(
     // 4. Воспроизведение
     const { sound } = await Audio.Sound.createAsync(
       { uri: tmpUri },
-      { shouldPlay: true }
+      { shouldPlay: false }
     );
     _currentSound = sound;
 
@@ -80,6 +80,8 @@ export async function speak(
         onDone?.();
       }
     });
+
+    await sound.playAsync();
   } catch (err) {
     console.warn('TTS ошибка:', err);
     onDone?.();
