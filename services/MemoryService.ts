@@ -171,7 +171,7 @@ export async function extractAndSaveFacts(
   messages: Message[]
 ): Promise<void> {
   try {
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+    const apiUrl = 'http://46.103.38.189';
     const resp = await fetch(`${apiUrl}/memory/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
