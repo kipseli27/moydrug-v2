@@ -38,12 +38,6 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Fix Kotlin version for expo-dev-client
-        run: |
-          sed -i 's/kotlinVersion = "[0-9.]*"/kotlinVersion = "2.1.0"/' android/build.gradle || true
-          grep -r 'kotlinVersion' android/build.gradle || echo "kotlinVersion not found, adding to gradle.properties"
-          echo "kotlin.stdlib.default.dependency=false" >> android/gradle.properties || true
-
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
