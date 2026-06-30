@@ -1,5 +1,5 @@
 // VoiceService — STT + TTS (edge-tts via server + expo-av)
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
 import { Audio } from 'expo-av';
 import type { VoiceConfig } from '@/types';
 
@@ -43,10 +43,15 @@ export async function speak(
   const json = await resp.json() as { audio?: string; error?: string };
   if (!json.audio) throw new Error(`no audio: ${json.error ?? 'unknown'}`);
 
-  const fileUri = (FileSystem.cacheDirectory ?? '') + 'tts_audio.mp3';
-  await FileSystem.writeAsStringAsync(fileUri, json.audio, {
-    encoding: 'base64' as any,
-  });
+  // Декодируем base64 → ArrayBuffer и пишем через новый File API (expo-file-system/next)
+  const binaryStr = atob(json.audio);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  const audioFile = new File(Paths.cache, 'tts_audio.mp3');
+  audioFile.write(bytes.buffer as ArrayBuffer);
+  const fileUri = audioFile.uri;
 
   await Audio.setAudioModeAsync({
     allowsRecordingIOS: false,
@@ -55,7 +60,7 @@ export async function speak(
     playThroughEarpieceAndroid: false,
   });
 
-  const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+  const { sound } = await Audio.Sound.createAsync({ uri: fileUri }, { shouldPlay: false });
   _currentSound = sound;
   await sound.playAsync();
 
