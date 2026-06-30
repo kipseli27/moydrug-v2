@@ -185,7 +185,7 @@ const ALLOWED_VOICES = [
 fastify.post('/tts', {
   config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
 }, async (request, reply) => {
-  const { text, voice = 'ru-RU-SvetlanaNeural' } = request.body ?? {};
+  const { text, voice = 'ru-RU-SvetlanaNeural', rate = '+25%', pitch = '+0Hz' } = request.body ?? {};
 
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return reply.status(400).send({ error: 'text обязателен' });
@@ -203,6 +203,8 @@ fastify.post('/tts', {
     await new Promise((resolve, reject) => {
       const proc = spawn('edge-tts', [
         '--voice', voice,
+        '--rate', rate,
+        '--pitch', pitch,
         '--text', text.trim(),
         '--write-media', tmpFile,
       ]);
@@ -238,8 +240,4 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 // ─── Запуск ──────────────────────────────────────────────────────────────────
 try {
   await fastify.listen({ port: PORT, host: HOST });
-  console.log(`🚀 Мой Друг сервер запущен на http://${HOST}:${PORT}`);
-} catch (err) {
-  fastify.log.error(err);
-  process.exit(1);
-}
+  console.log(`🚀 Мой Друг сервер запущен на http://$
