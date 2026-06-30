@@ -1,4 +1,4 @@
-// VoiceService — STT (expo-speech-recognition) + TTS (edge-tts via server → expo-av)
+// VoiceService — STT + TTS debug version
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import type { VoiceConfig } from '@/types';
@@ -11,9 +11,7 @@ try {
   const mod = require('expo-speech-recognition');
   ExpoSpeechRecognitionModule = mod.ExpoSpeechRecognitionModule;
   useSpeechRecognitionEvent = mod.useSpeechRecognitionEvent;
-} catch {
-  // not available in Expo Go
-}
+} catch {}
 
 let _currentSound: Audio.Sound | null = null;
 
@@ -30,64 +28,49 @@ export async function speak(
   const cleanText = text.replace(/[\p{Emoji}]/gu, '').trim();
   if (!cleanText) { onDone?.(); return; }
 
-  // Stop previous
   if (_currentSound) {
     try { await _currentSound.stopAsync(); await _currentSound.unloadAsync(); } catch {}
     _currentSound = null;
   }
 
-  try {
-    // Fetch TTS from server
-    const resp = await fetch(`${API_URL}/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: cleanText, voice: pickVoice(config) }),
-    });
-    if (!resp.ok) throw new Error('TTS server error');
-    const { audio } = await resp.json() as { audio: string };
+  // STEP 1: fetch TTS
+  const resp = await fetch(`${API_URL}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: cleanText, voice: pickVoice(config) }),
+  });
+  if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`);
 
-    // Write base64 MP3 to temp file (data: URIs unreliable on Android)
-    const fileUri = (FileSystem.cacheDirectory ?? '') + 'tts_audio.mp3';
-    await FileSystem.writeAsStringAsync(fileUri, audio, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+  const json = await resp.json() as { audio?: string; error?: string };
+  if (!json.audio) throw new Error(`no audio: ${json.error ?? 'unknown'}`);
 
-    // Set audio mode (play through speaker, not earpiece)
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    });
+  // STEP 2: write to file
+  const fileUri = (FileSystem.cacheDirectory ?? '') + 'tts_audio.mp3';
+  await FileSystem.writeAsStringAsync(fileUri, json.audio, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
 
-    // Load and play
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: fileUri },
-      { shouldPlay: true, volume: 1.0 }
-    );
-    _currentSound = sound;
+  // STEP 3: set audio mode
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
+  });
 
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
-        _currentSound = null;
-        onDone?.();
-      }
-    });
-  } catch (e) {
-    // Fallback to device TTS if server unavailable
-    console.warn('edge-tts failed, falling back to expo-speech:', e);
-    try {
-      const Speech = require('expo-speech');
-      Speech.speak(cleanText, {
-        language: config.language ?? 'ru-RU',
-        onDone,
-        onError: () => { onDone?.(); },
-      });
-    } catch {
+  // STEP 4: create and play
+  const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+  _currentSound = sound;
+  await sound.playAsync();
+
+  sound.setOnPlaybackStatusUpdate((status) => {
+    if (!status.isLoaded) return;
+    if (status.didJustFinish) {
+      sound.unloadAsync().catch(() => {});
+      _currentSound = null;
       onDone?.();
     }
-  }
+  });
 }
 
 export async function stopSpeaking(): Promise<void> {
@@ -95,10 +78,6 @@ export async function stopSpeaking(): Promise<void> {
     try { await _currentSound.stopAsync(); await _currentSound.unloadAsync(); } catch {}
     _currentSound = null;
   }
-  try {
-    const Speech = require('expo-speech');
-    await Speech.stop();
-  } catch {}
 }
 
 export function isSpeaking(): Promise<boolean> {
