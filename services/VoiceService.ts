@@ -1,4 +1,4 @@
-// VoiceService — STT + TTS debug version
+// VoiceService — STT + TTS (edge-tts via server + expo-av)
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
 import type { VoiceConfig } from '@/types';
@@ -33,7 +33,6 @@ export async function speak(
     _currentSound = null;
   }
 
-  // STEP 1: fetch TTS
   const resp = await fetch(`${API_URL}/tts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,13 +43,11 @@ export async function speak(
   const json = await resp.json() as { audio?: string; error?: string };
   if (!json.audio) throw new Error(`no audio: ${json.error ?? 'unknown'}`);
 
-  // STEP 2: write to file
   const fileUri = (FileSystem.cacheDirectory ?? '') + 'tts_audio.mp3';
   await FileSystem.writeAsStringAsync(fileUri, json.audio, {
-    encoding: FileSystem.EncodingType.Base64,
+    encoding: 'base64' as any,
   });
 
-  // STEP 3: set audio mode
   await Audio.setAudioModeAsync({
     allowsRecordingIOS: false,
     playsInSilentModeIOS: true,
@@ -58,7 +55,6 @@ export async function speak(
     playThroughEarpieceAndroid: false,
   });
 
-  // STEP 4: create and play
   const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
   _currentSound = sound;
   await sound.playAsync();
