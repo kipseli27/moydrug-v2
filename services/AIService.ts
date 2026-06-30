@@ -70,15 +70,20 @@ export function buildSystemPrompt(
 
   // [4] РЕЖИМ
   const modeBlock = mode === 'voice'
-    ? `# Режим: ГОЛОСОВОЙ. Отвечай коротко (max 2-3 фразы). БЕЗ эмодзи. Говори как в живом разговоре.`
+    ? `# ГОЛОСОВОЙ режим: 1-2 коротких фразы. БЕЗ эмодзи. Разговорный стиль.`
     : `# Режим: ТЕКСТОВЫЙ. Можно использовать эмодзи умеренно.`;
 
-  // [5] JSON ИНСТРУКЦИЯ
+  // [5] JSON ИНСТРУКЦИЯ (только в текстовом режиме)
   const jsonBlock = mode === 'text'
     ? `# В КОНЦЕ КАЖДОГО ОТВЕТА добавь (пользователь не видит):
 <!--D:{"m":"<emoji настроения>","i":"<короткое наблюдение о разговоре>","s":"<brief|emotional|playful|serious>"}-->
 Пример: <!--D:{"m":"😊","i":"Пользователь в хорошем настроении","s":"playful"}-->`
     : '';
+
+  // В voice режиме — минимальный prompt (скорость важнее)
+  if (mode === 'voice') {
+    return [personaBlock, modeBlock].join('\n\n');
+  }
 
   return [personaBlock, factsBlock, adaptBlock, modeBlock, jsonBlock]
     .filter(Boolean)
@@ -96,8 +101,9 @@ export async function sendMessage(
   mode: 'text' | 'voice' = 'text',
   detectedStyle: AIProfile['s'] = 'emotional'
 ): Promise<{ content: string; profile: AIProfile | null }> {
-  // Берём последние 30 сообщений в хронологическом порядке
-  const trimmedHistory = history.slice(-30).map((m) => ({
+  // В voice режиме берём только 5 последних (меньше токенов = быстрее)
+  const historyLimit = mode === 'voice' ? 5 : 30;
+  const trimmedHistory = history.slice(-historyLimit).map((m) => ({
     role: m.role,
     content: m.content,
   }));
